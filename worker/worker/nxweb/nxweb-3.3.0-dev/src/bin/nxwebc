@@ -1,0 +1,15 @@
+#!/bin/sh
+
+if [ $# -eq 0 ]; then
+  echo NXWEB custom C module compiler.
+  echo Usage: nxwebc module1.c [module2.c ...] -o modules.so
+  exit 1
+fi
+
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+echo gcc -fPIC -shared -I${includedir} -I/usr/include/p11-kit-1   $@
+gcc -fPIC -shared -I${includedir} -I/usr/include/p11-kit-1   $@

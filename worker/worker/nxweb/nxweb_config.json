@@ -1,0 +1,12 @@
+{
+  "load": [
+        {"so": "/root/libroot_handler.so"},
+        {"so": "/root/libapi_v_1.so"}
+  ],
+  "routing": [
+        {"prefix":"/1", "handler":"api_v_1"},
+        {"prefix":null, "handler":"root_handler"}
+  ],
+  "logging": { "log_level": "NONE" }
+}
+

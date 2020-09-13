@@ -1,0 +1,12 @@
+{
+  "load": [
+    {"so": "../build-worker-Desktop_Qt_5_5_1_GCC_64bit4-Release/api/libapi_v_1.so"},
+    {"so": "../build-worker-Desktop_Qt_5_5_1_GCC_64bit4-Release/root/libroot_handler.so"}
+  ],
+  "routing": [
+    {"prefix":"/1", "handler":"api_v_1"},
+    {"prefix":null, "handler":"root_handler"}
+  ],
+  "logging": { "log_level": "NONE" }
+}
+

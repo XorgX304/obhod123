@@ -1,0 +1,63 @@
+using 
+https://github.com/kylemanna/docker-openvpn
+
+
+Every server is management!
+
+users/passwords stored in csv file
+---Uses file---
+version 1
+revision 123
+
+user	password	validTill
+file ends with special string like
+____________________________________________
+if string is missing than the file is broken
+
+
+
+
+
+---Servers file---
+version 1
+revision 123
+update 1234
+ip	country	city max_speed	avg_speed	password
+
+
+ 
+API endpoints:
+
+For clients:
+- c_getServers(QString md5(client_password,ip,date))
+- c_getOvpnFile(QString userName, QString md5(client_password,ip,date)) { if (d_getUser(userName)).isEmpty()) {d_addUser(userName); d_getUser(userName);} }
+
+For servers:
+- s_getUsers(QString md5(server_password))
+- s_getUsersLastRevision(QString md5(server_password))
+- s_getServers(QString md5(server_password))
+- s_getServersLastRevision(QString md5(server_password))
+
+For management:
+- m_addUser(QJsonObject user, QString md5(server_password))
+- m_removeUser(QString userName, QString md5(server_password))
+- m_addServer(QJsonObject server, QString md5(server_password))
+- m_removeServer(QString ip, QString md5(server_password))
+
+
+Commands for docker container:
+- d_addUser(QString userName)
+- d_getUser(QString userName)
+- d_removeUser(QString userName)
+
+
+
+Server Loops:
+- ask servers for new users list 
+{
+  foreach(server: servers) 
+   revision = getUsersLastRevision(md5(server.password))
+   if (revision > currentRevision) newServers = getServers(md5(server.password))
+   if (newServers.isValid) { servers = newServers; servers.writeToDisk;}
+}
+Sync users DB with .ovpn file store

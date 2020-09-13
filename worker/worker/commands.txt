@@ -1,0 +1,59 @@
+// clear volumes images
+sudo docker volume prune -f
+sudo docker system prune -a -f
+sudo docker image prune -a -f
+sudo docker container prune -f
+
+image="obhod123/obhod123"
+
+
+
+sudo docker build -t "$image" .
+sudo docker inspect "$image"
+sudo docker run --rm "$image" openvpn --version || true # why does it return 1?
+sudo docker run --rm "$image" openssl version
+
+
+OVPN_DATA="ovpn-data"
+
+docker volume create --name $OVPN_DATA
+
+sudo docker run -v $OVPN_DATA:/etc/openvpn --rm obhod123/obhod123 ovpn_genconfig -u udp://10.0.2.15
+sudo docker run -v $OVPN_DATA:/etc/openvpn --rm obhod123/obhod123 ovpn_genconfig -u udp://192.168.0.109
+
+sudo docker run -v $OVPN_DATA:/etc/openvpn --rm -it obhod123/obhod123 ovpn_initpki
+sudo docker run -v $OVPN_DATA:/etc/openvpn -d -p 1194:1194/udp --cap-add=NET_ADMIN obhod123/obhod123
+
+sudo docker run -v $OVPN_DATA:/etc/openvpn --rm -it obhod123/obhod123 easyrsa build-client-full test1 nopass
+sudo docker run -v $OVPN_DATA:/etc/openvpn --rm obhod123/obhod123 ovpn_getclient test1 > test1.ovpn
+
+sudo docker run -v $OVPN_DATA:/etc/openvpn --rm -it obhod123/obhod123 echo -en "qazwsx\n" | easyrsa build-client-full test3 nopass
+ 
+
+sudo nxweb -H 0.0.0.0:80 -w /media/sf_projects_2018/obhod123/src/worker/worker
+
+
+docker service create --name redis \
+  --mount type=bind,source=/path/on/host,destination=/path/in/container \
+ redis:3.0.6
+
+sudo docker save obhod123/obhod123 > obhod123.tar
+sudo docker load < obhod123.tar
+
+/////////////////////
+Pruduction bash script
+
+sudo docker run --mount type=bind,source=/obhod123,destination=/obhod123 -d -p 1194:1194/udp -p 80:80/tcp -e ip='192.168.0.109' --cap-add=NET_ADMIN obhod123/obhod123
+
+
+///////////////////////////////////////////////////////////////////
+// it will run script which will run nxweb and send first request
+nxweb -H 0.0.0.0:80 -w /root/
+
+// nxweb will run :
+ovpn_genconfig -u udp://$ip
+ovpn_initpki
+ovpn_run
+
+curl 127.0.0.1
+
