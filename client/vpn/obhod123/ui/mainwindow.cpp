@@ -1611,13 +1611,26 @@ void MainWindow::on_pushButton_sites_delete_custom_clicked()
     QModelIndex index = ui->listView_sites_custom->currentIndex();
     QString siteToDelete = index.data(Qt::DisplayRole).toString();
 
+    if (siteToDelete.isEmpty()) {
+        return;
+    }
+
+    QString ipToDelete = Obhod123Utils::getIPAddress(siteToDelete);
+
     QStringList customSites = Settings::customSites();
     customSites.removeAll(siteToDelete);
     qDebug() << "Deleted custom site:" << siteToDelete;
     Settings::setCustomSites(customSites);
+
+    QStringList customIps = Settings::customIps();
+    customIps.removeAll(ipToDelete);
+    qDebug() << "Deleted custom ip:" << ipToDelete;
+    Settings::setCustomIps(customIps);
+
+
     initCustomSites();
 
-    Router::Instance().routeDelete(Obhod123Utils::getIPAddress(siteToDelete));
+    Router::Instance().routeDelete(Obhod123Utils::getIPAddress(ipToDelete));
     Router::Instance().flushDns();
 }
 

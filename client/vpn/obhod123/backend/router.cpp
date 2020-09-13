@@ -142,10 +142,12 @@ bool Router::routeAdd(const QString &ip, const QString &gw, QString mask)
 
 int Router::routeAddList(const QString &gw, const QStringList &ips)
 {
-    qDebug().noquote() << QString("ROUTE ADD: IPs size:%1, GW: %2")
+    qDebug().noquote() << QString("ROUTE ADD List: IPs size:%1, GW: %2")
                           .arg(ips.size())
                           .arg(gw);
 
+    qDebug().noquote() << QString("ROUTE ADD List: IPs:\n%1")
+                          .arg(ips.join("\n"));
 
     PMIB_IPFORWARDTABLE pIpForwardTable = NULL;
     DWORD dwSize = 0;
