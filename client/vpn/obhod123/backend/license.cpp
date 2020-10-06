@@ -1,4 +1,4 @@
-﻿#include "license.h"
+#include "license.h"
 
 License::LicenseMode License::getCurrentLicenseMode()
 {
@@ -32,11 +32,13 @@ License::LicenseMode License::getCurrentLicenseMode()
 
 bool License::isLicenseExpired()
 {
-    QDateTime currentDateTime = QDateTime::currentDateTime();
-    QDateTime validDateTime = Settings::licenseValidDateTime();
+    return false;
 
-    if (validDateTime < currentDateTime) return true;
-    else return false;
+//    QDateTime currentDateTime = QDateTime::currentDateTime();
+//    QDateTime validDateTime = Settings::licenseValidDateTime();
+
+//    if (validDateTime < currentDateTime) return true;
+//    else return false;
 }
 
 void License::checkLicenseOnStartup()
