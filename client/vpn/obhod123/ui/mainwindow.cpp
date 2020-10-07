@@ -12,7 +12,6 @@
 #include "flags.h"
 #include "mainwindow.h"
 #include "backend/vpnutils.h"
-#include "../backend/pinger.h"
 #include "backend/vpndefine.h"
 
 
@@ -24,6 +23,8 @@
 #include "ui_mainwindow_mac.h"
 #include "publib/macos_functions.h"
 #endif
+
+#include "backend/sshclient.h"
 
 QString FormatDataNumber(quint64 size)
 {
@@ -72,7 +73,6 @@ MainWindow::MainWindow(bool useForceUseBrightIcons, QWidget *parent) : QMainWind
 
     checkIfFirstRun();
     License::checkLicenseOnStartup();
-    displayLicenseInfo();
 
     ui->widget_tittlebar->installEventFilter(this);
 
@@ -94,38 +94,13 @@ MainWindow::MainWindow(bool useForceUseBrightIcons, QWidget *parent) : QMainWind
     ui->stackedWidget_main->setAnimation(QEasingCurve::Linear);
     setupTray();
 
-
-    filterModel = new FilterModel;
-    serversModel = new ServerModel;
-    filterModel->setSourceModel(serversModel);
-    ui->tableView_servers->setModel(filterModel);
-
-
-    RowHoverDelegate *delegate = new RowHoverDelegate(ui->tableView_servers);
-    ui->tableView_servers->setItemDelegate(delegate);
-
     setVpnConnections();
 
     qRegisterMetaType<VPNClient::STATE>("VPNClient::STATE");
 
-    detectedLocationTimer.setSingleShot(true);
-    connect(&detectedLocationTimer, &QTimer::timeout, [&](){
-        setDetectedLocation();
-    });
-
-    connect(&originalLocationTimer, &QTimer::timeout, [&](){
-        setOriginalLocation();
-    });
-    originalLocationTimer.setSingleShot(true);
-    originalLocationTimer.start(5000);
-
-    QTimer::singleShot(100, [&](){
-        setOriginalLocation();
-    });
-
     connect(&durationTimer, &QTimer::timeout, [&](){
 #if QT_VERSION > QT_VERSION_CHECK(5, 7, 0)
-        ui->label_duration->setText(secondsToString(QDateTime::currentSecsSinceEpoch()- connectedDateTime));
+//        ui->label_duration->setText(secondsToString(QDateTime::currentSecsSinceEpoch() - connectedDateTime));
 #endif
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 7, 0)
@@ -135,25 +110,19 @@ MainWindow::MainWindow(bool useForceUseBrightIcons, QWidget *parent) : QMainWind
     //durationTimer.start(1000);  // will update label with connect duration
 
 
-    QMovie *conn_animation = new QMovie(":/images/connecting_animation.gif");
-    conn_animation->setScaledSize(QSize(212, 212));
-    ui->label_conn_animation->setMovie(conn_animation);
-    conn_animation->start();
+//    QMovie *conn_animation = new QMovie(":/images/connecting_animation.gif");
+//    conn_animation->setScaledSize(QSize(212, 212));
+//    ui->label_conn_animation->setMovie(conn_animation);
+//    conn_animation->start();
 
-    QMovie *darknet_animation = new QMovie(":/images/darknet.gif");
-    darknet_animation->setScaledSize(QSize(142, 122));
-    darknet_animation->jumpToFrame(20);
-    ui->label_login_animation->setMovie(darknet_animation);
-    darknet_animation->start();
-    ui->label_init_animation->setMovie(darknet_animation);
-    // wait while showAnimated() finished and unpin label_login_animation to current position
+//    QMovie *darknet_animation = new QMovie(":/images/anim.gif");
+//    darknet_animation->setScaledSize(QSize(142, 122));
+//    darknet_animation->jumpToFrame(20);
+//    ui->label_login_animation->setMovie(darknet_animation);
+//    darknet_animation->start();
+//    ui->label_init_animation->setMovie(darknet_animation);
+//    // wait while showAnimated() finished and unpin label_login_animation to current position
 
-
-//    QMovie *logo_animation = new QMovie(":/images/logo_animated.gif");
-//    logo_animation->setScaledSize(QSize(130, 150));
-//    ui->label_logo->setMovie(logo_animation);
-//    logo_animation->start();
-//    //logo_animation->setSpeed(100000);
 
     {
         // traffic counters
@@ -172,9 +141,6 @@ MainWindow::MainWindow(bool useForceUseBrightIcons, QWidget *parent) : QMainWind
         //on_pushButton_pay_clicked();
     });
 
-    ui->tableView_servers->verticalHeader()->setDefaultSectionSize(100);
-
-    Pinger::Instance().setPingCheckingEnabled(true);
 
 #ifdef Q_OS_MAC
     setFixedSize(width(), height());
@@ -185,21 +151,9 @@ MainWindow::MainWindow(bool useForceUseBrightIcons, QWidget *parent) : QMainWind
     //resize(width(), QApplication::desktop()->availableGeometry().height());
     ui->widget_main->resize(ui->widget_main->width(), QApplication::desktop()->availableGeometry().height());
     ui->stackedWidget_main->resize(ui->stackedWidget_main->width(), QApplication::desktop()->availableGeometry().height());
-    ui->tableView_servers->resize(ui->tableView_servers->width(), QApplication::desktop()->availableGeometry().height() - 94 - 35);
     showObhod123();
 
-    QTimer::singleShot(600, [&](){
-        QPoint p =  ui->label_login_animation->mapToGlobal(QPoint(0,0));
-        ui->label_login_animation->setParent(0);
-        ui->label_login_animation->move(p);
-        ui->label_login_animation->setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
-        ui->label_login_animation->hide();
-    });
-
-
-    ui->label_obhod_license_type->hide();
-    ui->label_obhod_license_valid->hide();
-    ui->pushButton_donate->hide();
+    onConnect();
 }
 
 MainWindow::~MainWindow()
@@ -380,13 +334,6 @@ void MainWindow::on_pushButton_login_clicked()
 //    ui->pushButton_login->setEnabled(true);
 }
 
-void MainWindow::on_pushButton_select_server_clicked()
-{
-    ui->tableView_servers->updateTable();
-    on_pushButton_servers_all_clicked();
-    ui->stackedWidget_main->slideInWidget(ui->page_servers, SlidingStackedWidget::AUTOMATIC);
-}
-
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     event->ignore();
@@ -395,85 +342,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::setVpnConnections()
 {
-    connect(&API_HTTP::Instance(), &API_HTTP::serverListChanged, this, &MainWindow::onServerListChanged);
+//    connect(&API_HTTP::Instance(), &API_HTTP::serverListChanged, this, &MainWindow::onServerListChanged);
 
     connect(&obhod123, &Obhod123::vpnClientStateChanged, this, &MainWindow::onVpnStateChanged);
     connect(&obhod123, &Obhod123::vpnClientMessage, this, &MainWindow::onVpnMessage);
 
     connect(&m_tray, &QSystemTrayIcon::activated, this, &MainWindow::onTrayActivated);
-
-    connect(&obhod123, &Obhod123::autoTryingServer, [&](QString server_id, int retry_number){
-        Q_UNUSED(retry_number);
-        setSelectedLocation(server_id);
-
-
-//        QJsonObject server = API_HTTP::Instance().getServerById(server_id);
-
-        // show/hide port fwd
-        //ui->label_port_forward->setVisible(server.value("port_forwarding").toString() == "1");
-
-//        QJsonObject data;
-//        data.insert("vpn_original_country", originalCountry);
-//        data.insert("vpn_protocol", q_settings.value("protocol").toString());
-//        data.insert("vpn_auto_server_id", server_id);
-//        data.insert("vpn_auto_server", server.value("name").toString());
-//        data.insert("vpn_auto_retry_number", retry_number);
-    });
-
-}
-
-QString MainWindow::generateAppId()
-{
-    QString hash = QDateTime::currentDateTimeUtc().toString() + "asdfghjk";
-
-    QByteArray hash_ba = QCryptographicHash::hash(hash.toUtf8(), QCryptographicHash::Md5);
-
-    QDate startDate = QDate(2018, 5, 9);
-    qint16 days = startDate.daysTo(QDate::currentDate());
-    QByteArray days_ba;
-    QDataStream stream(&days_ba, QIODevice::WriteOnly);
-    stream << days;
-    days_ba = QCryptographicHash::hash(days_ba, QCryptographicHash::Md5).mid(0, 2);
-
-    QByteArray appId_ba = days_ba +hash_ba.mid(0, 14);
-
-    return QString(appId_ba.toBase64(QByteArray::Base64UrlEncoding));
-}
-
-void MainWindow::setupLoginPage()
-{
-    API_HTTP::Instance().clearAuthData();
-    ui->label_errorMessage->hide();
-
-    // pretty slide widget, fix darknet animation
-    QPoint p =  ui->label_login_animation->mapToGlobal(QPoint(0,0));
-    qDebug() << "MainWindow::setupLoginPage, animation is on" << p;
-
-    ui->label_init_animation->hide();
-
-//    ui->label_login_animation->setParent(0);
-//    ui->label_login_animation->move(1200,200);
-//    ui->label_login_animation->setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
-//    ui->label_login_animation->raise();
-    ui->label_login_animation->show();
-    qApp->processEvents();
-
-
-
-
-
-    ui->stackedWidget_main->slideInWidget(ui->page_login, SlidingStackedWidget::AUTOMATIC);
-    QMetaObject::Connection *c = new QMetaObject::Connection;
-    *c = connect(ui->stackedWidget_main, &SlidingStackedWidget::animationFinished, [&, c](){
-        ui->label_login_animation->setParent(ui->page_login);
-        ui->label_login_animation->move(119,30);
-        disconnect(*c);
-    });
-
-
-    ui->checkBox_lauchOnStartup->setChecked(Settings::launchOnStartup());
-
-    ui->lineEdit_username->setText(Settings::userId());
 }
 
 void MainWindow::setupObhodPage()
@@ -481,11 +355,9 @@ void MainWindow::setupObhodPage()
     //ui->pushButton_support->hide();
 
     API_HTTP::Instance().clearAuthData();
-    ui->label_errorMessage->hide();
+//    ui->label_errorMessage->hide();
 
     ui->stackedWidget_main->slideInWidget(ui->page_obhod, SlidingStackedWidget::AUTOMATIC);
-
-    displayLicenseInfo();
 
     Settings::setReconnectOnDrop(true);
     Settings::setLaunchOnStartup(true);
@@ -504,90 +376,7 @@ void MainWindow::setupObhodPage()
 
 void MainWindow::setupInitPage()
 {
-    ui->stackedWidget_main->slideInWidget(ui->page_init, SlidingStackedWidget::AUTOMATIC);
-
-    // read servers from disk
-    bool ok = API_HTTP::Instance().loadServersFromDisk_text();
-    if (!ok) ok = API_HTTP::Instance().loadServersFromDisk();
-    if (!ok) {
-        // Use backup file
-    }
-//    ui->label_init_message_1->setText(QString("Loaded %1 cached servers")
-//                                      .arg(API_HTTP::Instance().getServersList().size()));
-
-    // ping servers to find which one is the best
-    Pinger::Instance().setPingCheckingEnabled(true);
-    //ui->label_init_message_2->setText(tr("Checking servers"));
-
-   // return;
-
-    // display ping while waiting
-//    QTimer serversPingsTimer;
-//    connect(&serversPingsTimer, &QTimer::timeout, [&](){
-
-//    });
-//    serversPingsTimer.start();
-
-    // wait 2 sec to collect pings
-    {
-        QEventLoop loop;
-        QTimer::singleShot(1000, &loop, SLOT(quit()));
-        loop.exec();
-    }
-
-    // get cached servers sorted by pings <id, ping>
-    QList<QPair<QString, double>> servers = Pinger::Instance().getServersSortedByPing();
-    qDebug() << "MainWindow::setupInitPage servers 1 size" << servers.size() << servers;
-
-    // Try to update
-    if (servers.size() > 0) {
-        QString ip = API_HTTP::Instance().getServerById(servers.at(0).first).value("ip").toString();
-        if (Updater::Instance().checkForUpdates(ip)) {
-            Updater::Instance().updateApp(ip);
-            qApp->quit();
-            return;
-        }
-    }
-
-
-    // discover servers
-    int retry = 0;
-    while (!API_HTTP::Instance().requestServers(servers) && !needExit) {
-        retry++;
-        qDebug() << "MainWindow::setupInitPage :: Failed to update servers";
-        //ui->label_init_message_3->setText(tr("Retry #%1").arg(retry));
-        QEventLoop waitingLoop;
-        QTimer::singleShot(10000, &waitingLoop, SLOT(quit()));
-        waitingLoop.exec();
-
-        // get servers again
-        servers = Pinger::Instance().getServersSortedByPing();
-
-        // reset QNAM for case if network was reconnected
-        API_HTTP::Instance().resetNAM();
-
-        // try ti update again
-        if (servers.size() > 0) {
-            QString ip = API_HTTP::Instance().getServerById(servers.at(0).first).value("ip").toString();
-            if (Updater::Instance().checkForUpdates(ip)) {
-                Updater::Instance().updateApp(ip);
-                qApp->quit();
-                return;
-            }
-        }
-    }
-
-    // wait 2 sec to collect pings
-    {
-        QEventLoop loop;
-        QTimer::singleShot(1000, &loop, SLOT(quit()));
-        loop.exec();
-    }
-    // get cached servers sorted by pings <id, ping>
-    servers = Pinger::Instance().getServersSortedByPing();
-    qDebug() << "MainWindow::setupInitPage servers 2 size" << servers.size() << servers;
-
-    initTarifSettings();
+    ui->stackedWidget_main->slideInWidget(ui->page_obhod, SlidingStackedWidget::AUTOMATIC);
 }
 
 void MainWindow::mayBeAutoLogin()
@@ -619,84 +408,15 @@ void MainWindow::mayBeAutoLogin()
     }
 }
 
-
-void MainWindow::onServerListChanged()
-{
-    QString currentServerId = Settings::currentServerId();
-    setSelectedLocation(currentServerId);
-
-    ui->checkBox_autoServer->setChecked(Settings::autoServer());
-    if (Settings::autoServer()) setSelectedLocation("");
-    else setSelectedLocation(Settings::currentServerId());
-}
-
 void MainWindow::on_pushButton_cancel_clicked()
 {
-    ui->stackedWidget_main->slideInWidget(ui->page_connection, SlidingStackedWidget::AUTOMATIC);
+    //ui->stackedWidget_main->slideInWidget(ui->page_connection, SlidingStackedWidget::AUTOMATIC);
 }
 
 void MainWindow::on_checkBox_lauchOnStartup_clicked()
 {
 
-    Settings::setLaunchOnStartup(ui->checkBox_lauchOnStartup->isChecked());
-}
-
-void MainWindow::on_tableView_servers_clicked(const QModelIndex &index)
-{
-    //    on_pushButton_cancel_clicked();
-    //    return;
-
-    const QModelIndex &sourceIndex = filterModel->mapToSource(index);
-
-
-
-    // auto server disabled now
-    //    if (index.row() == 0) {
-    //        q_settings.setValue("currentServerId", QString(""));
-    //        on_pushButton_cancel_clicked();
-    //        return;
-    //    }
-
-    bool isServer = sourceIndex.data(RowIsServerRole).toBool();
-    if (!isServer) return;
-
-    QString serverId = sourceIndex.data(ServerIdRole).toString();
-
-
-    if (index.column() == 3) {
-        QStringList favorites = Settings::favoritesServers();
-
-        if (favorites.contains(serverId))  favorites.removeAll(serverId);
-        else favorites.append(serverId);
-
-        Settings::setFavoritesServers(favorites);
-
-        serversModel->resetModel();
-    }
-    else {
-        Settings::setCurrentServerId(serverId);
-        setSelectedLocation(serverId);
-        on_pushButton_cancel_clicked();
-    }
-}
-
-
-void MainWindow::on_pushButton_servers_all_clicked()
-{
-    filterModel->setOnlyFavorites(false);
-    filterModel->setOnlyRecommended(false);
-}
-
-void MainWindow::on_pushButton_servers_recommended_clicked()
-{
-    filterModel->setOnlyFavorites(false);
-    filterModel->setOnlyRecommended(true);
-}
-
-void MainWindow::on_pushButton_servers_favorites_clicked()
-{
-    filterModel->setOnlyFavorites(true);
-    filterModel->setOnlyRecommended(false);
+    //Settings::setLaunchOnStartup(ui->checkBox_lauchOnStartup->isChecked());
 }
 
 void MainWindow::on_pushButton_connect_clicked()
@@ -719,82 +439,28 @@ void MainWindow::onConnect()
     // ruturn if connected
     if (obhod123.vpnStatus() == VPNClient::CONNECTED) return;
 
-    // check license on local
-    if (! License::checkLicenseOnConnect()) {
-        activateLicenseRestrictions();
-        return;
-    }
-
-
-    // check license on server
-    API_HTTP::AuthResult authResult;
-    while (!needExit) {
-        authResult = API_HTTP::Instance().requestAuth(Settings::userId());
-
-        if (authResult == API_HTTP::AUTH_KEY_EXPIRED) {
-            // TODO ask to go trial
-            showAnimated();
-            return;
-        }
-        else if (authResult == API_HTTP::AUTH_KEY_NOT_FOUND) {
-            // TODO ask to go trial
-            if (!isVisible()) showAnimated();
-            return;
-        }
-        else if (authResult == API_HTTP::AUTH_TIMEOUT) {
-            QEventLoop loop;
-            QTimer::singleShot(10000, &loop, SLOT(quit()));
-            loop.exec();
-        }
-        else if (authResult == API_HTTP::AUTH_SUCCESS) {
-            break;
-        }
-    }
-
-
-    // fix selected server if it was changed when trying to connect
-    on_checkBox_autoServer_clicked();
-
-    if (!ui->checkBox_autoServer->isChecked() && ui->label_current_server->text() == "Auto Selection") return;
-
     lastUserAction = Connect;
-
-
-    ui->pushButton_cancelConnect->setEnabled(true);
-    ui->pushButton_disconnect->setEnabled(true);
 
 //    if (q_settings.value("protocol").toString() == "ovpn")
 //        ui->widget_conn_speed->show();
 //    else
 //        ui->widget_conn_speed->hide();
 
-    //int vpn_counter_click_connect = q_settings.value("vpn_counter_click_connect").toInt();
-    //q_settings.setValue("vpn_counter_click_connect", vpn_counter_click_connect + 1);
 
-    ui->stackedWidget_center->setCurrentWidget(ui->page_center_connecting);
-    QString currentServerId;
-    if (ui->checkBox_autoServer->isChecked())
-        currentServerId = "";
-    else
-        currentServerId = Settings::currentServerId();
+//    ui->stackedWidget_center->setCurrentWidget(ui->page_center_connecting);
+//    QString currentServerId;
+//    if (ui->checkBox_autoServer->isChecked())
+//        currentServerId = "";
+//    else
+//        currentServerId = Settings::currentServerId();
 
-    QJsonObject server = API_HTTP::Instance().getServerById(currentServerId);
-
-//    QJsonObject data;
-//    data.insert("vpn_original_country", originalCountry);
-//    data.insert("vpn_protocol", q_settings.value("protocol").toString());
-//    data.insert("vpn_server_id", currentServerId);
-//    data.insert("vpn_server", server.value("name").toString());
-//    data.insert("vpn_auto_connect", currentServerId.isEmpty());
 
     QJsonObject connectionParams;
-    connectionParams.insert("server", server);
+    connectionParams.insert("server", Settings::currentServerIp());
     connectionParams.insert("protocol", Settings::protocol());
 
 
-
     if (Settings::appMode() == "obhod") {
-        Pinger::Instance().setPingCheckingEnabled(true);
         while (!needExit) {
             bool ok = obhod123.onConnectAuto(connectionParams);
             if (ok) break;
@@ -807,99 +473,23 @@ void MainWindow::onConnect()
         qDebug() << "MainWindow::onConnect :::: Obhod mode : onConnectAuto success";
     }
     else {
-        if (currentServerId.isEmpty())  {
-            bool ok = obhod123.onConnectAuto(connectionParams);
-            if (!ok) {
-                ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
-                QMessageBox::warning(0, "Obhod123", "Couldn't connect to any server.\n");
-            }
-            qDebug() << "MainWindow::onConnect :::: Pro mode : onConnectAuto success";
+        bool ok = obhod123.onConnectAuto(connectionParams);
+        if (!ok) {
+            //ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
+            QMessageBox::warning(0, "Obhod123", "Couldn't connect to any server.\n");
         }
-        else {
-            bool ok = obhod123.onConnect(connectionParams);
-            if (!ok) {
-                ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
-                //m_tray.showMessage("Obhod123", "Couldn't connect to the server.");
-            }
-            else {
-                // show/hide port fwd
-                //ui->label_port_forward->setVisible(server.value("port_forwarding").toString() == "1");
-            }
-        }
+        qDebug() << "MainWindow::onConnect :::: Pro mode : onConnectAuto success";
+
 
     }
-
-
-    setDetectedLocation();
-
-
-
-
-
-
-
-
-
-
-//    if (currentServerId.isEmpty())  {
-//        if (Settings::appMode() == "obhod") {
-//            Pinger::Instance().setPingCheckingEnabled(true);
-//            while (!needExit) {
-//                bool ok = obhod123.onConnectAuto(connectionParams);
-//                if (ok) break;
-
-//                QEventLoop loop;
-//                QTimer::singleShot(10000, &loop, SLOT(quit()));
-//                loop.exec();
-//            }
-
-//            qDebug() << "MainWindow::onConnect :::: onConnectAuto success";
-//        }
-//        else {
-//            bool ok = obhod123.onConnectAuto(connectionParams);
-//            if (!ok) {
-//                ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
-//                QMessageBox::warning(0, "Obhod123", "Couldn't connect to any server.\n");
-//            }
-//            qDebug() << "MainWindow::onConnect :::: onConnectAuto success";
-//        }
-//    }
-//    else {
-//        bool ok = obhod123.onConnect(connectionParams);
-//        if (!ok) {
-//            ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
-//            //m_tray.showMessage("Obhod123", "Couldn't connect to the server.");
-//        }
-//        else {
-//            // show/hide port fwd
-//            //ui->label_port_forward->setVisible(server.value("port_forwarding").toString() == "1");
-//        }
-//    }
 }
 
 void MainWindow::onDisconnect()
 {
     lastUserAction = Disconnect;
 
-    ui->pushButton_disconnect->setEnabled(false);
-    ui->pushButton_cancelConnect->setEnabled(false);
-
-    //int vpn_counter_click_disconnect = q_settings.value("vpn_counter_click_disconnect").toInt();
-    //q_settings.setValue("vpn_counter_click_disconnect", vpn_counter_click_disconnect + 1);
-
-    QString currentServerId;
-    if (ui->checkBox_autoServer->isChecked())
-        currentServerId = "";
-    else
-        currentServerId = Settings::currentServerId();
-
-//    QJsonObject server = API_HTTP::Instance().getServerById(currentServerId);
-//    QJsonObject data;
-//    data.insert("vpn_original_country", originalCountry);
-//    data.insert("vpn_protocol", q_settings.value("protocol").toString());
-//    data.insert("vpn_server_id", currentServerId);
-//    data.insert("vpn_server", server.value("name").toString());
-//    data.insert("vpn_auto_connect", currentServerId.isEmpty());
+//    ui->pushButton_disconnect->setEnabled(false);
+//    ui->pushButton_cancelConnect->setEnabled(false);
 
     obhod123.onClickDisconnect();
 }
@@ -908,26 +498,8 @@ void MainWindow::onCancelConnect()
 {
     lastUserAction = CancelConnect;
 
-    ui->pushButton_cancelConnect->setEnabled(false);
-    ui->pushButton_disconnect->setEnabled(false);
-
-    //int vpn_counter_click_cancel = q_settings.value("vpn_counter_click_cancel").toInt();
-    //q_settings.setValue("vpn_counter_click_cancel", vpn_counter_click_cancel + 1);
-
-    QString currentServerId;
-    if (ui->checkBox_autoServer->isChecked())
-        currentServerId = "";
-    else
-        currentServerId = Settings::currentServerId();
-
-    QJsonObject server = API_HTTP::Instance().getServerById(currentServerId);
-
-    QJsonObject data;
-    data.insert("vpn_original_country", originalCountry);
-    data.insert("vpn_protocol", Settings::protocol());
-    data.insert("vpn_server_id", currentServerId);
-    data.insert("vpn_server", server.value("name").toString());
-    data.insert("vpn_auto_connect", currentServerId.isEmpty());
+//    ui->pushButton_cancelConnect->setEnabled(false);
+//    ui->pushButton_disconnect->setEnabled(false);
 
     obhod123.onCancel();
 }
@@ -935,26 +507,18 @@ void MainWindow::onCancelConnect()
 
 void MainWindow::onVpnStateChanged(VPNClient::STATE state)
 {
-    QString currentServerId;
-    if (ui->checkBox_autoServer->isChecked())
-        currentServerId = "";
-    else
-        currentServerId = Settings::currentServerId();
+//    QString currentServerId;
+//    if (ui->checkBox_autoServer->isChecked())
+//        currentServerId = "";
+//    else
+//        currentServerId = Settings::currentServerId();
 
+    QString currentServerIp = Settings::currentServerIp();
     //QMetaEnum metaEnum = QMetaEnum::fromType<VPNClient::STATE>();
     //QString stateName = metaEnum.valueToKey(state);
 
-    //int vpn_counter_state = q_settings.value("vpn_counter_state_" + stateName).toInt();
-    //q_settings.setValue("vpn_counter_state_" + stateName, vpn_counter_state + 1);
 
 
-//    QJsonObject data;
-//    data.insert("vpn_original_country", originalCountry);
-//    data.insert("vpn_protocol", q_settings.value("protocol").toString());
-//    data.insert("vpn_server", currentServerId);
-//    data.insert("vpn_auto_connect", ui->checkBox_autoServer->isChecked());
-//    data.insert("vpn_state", stateName);
-    // qDebug().noquote() << QJsonDocument(data).toJson();
 
     qDebug().noquote() << "MainWindow::onVpnStateChanged: new STATE: " << state;
 
@@ -962,34 +526,25 @@ void MainWindow::onVpnStateChanged(VPNClient::STATE state)
     m_trayActionConnect->setEnabled(false);
 
     if (state == VPNClient::CONNECTING) {
-        ui->stackedWidget_center->setCurrentWidget(ui->page_center_connecting);
-        ui->pushButton_select_server->setEnabled(false);
-        ui->label_status->setText(tr("Connecting..."));
+//        ui->stackedWidget_center->setCurrentWidget(ui->page_center_connecting);
+//        ui->pushButton_select_server->setEnabled(false);
+//        ui->label_status->setText(tr("Connecting..."));
         ui->label_status_2->setText(tr("Connecting..."));
     }
 
     if (state == VPNClient::DISCONNECTING) {
-        ui->stackedWidget_center->setCurrentWidget(ui->page_center_connecting);
-        ui->label_status->setText(tr("Disconnecting..."));
+//        ui->stackedWidget_center->setCurrentWidget(ui->page_center_connecting);
+//        ui->label_status->setText(tr("Disconnecting..."));
         ui->label_status_2->setText(tr("Disconnecting..."));
     }
     if (state == VPNClient::DISCONNECTED) {
         durationTimer.stop();
-        ui->label_duration->setText("00:00:00");
-        ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
-        ui->label_status->setText(tr("Disconnected"));
+//        ui->label_duration->setText("00:00:00");
+//        ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
+//        ui->label_status->setText(tr("Disconnected"));
         ui->label_status_2->setText(tr("Connecting..."));
-        if (!ui->checkBox_autoServer->isChecked()) ui->pushButton_select_server->setEnabled(true);
-        Pinger::Instance().setPingCheckingEnabled(true);
-        //ui->stackedWidget_bottom->setCurrentWidget(ui->page_bottom_disconnected);
 
         setTrayIcon("default.png");
-
-        //ui->label_detected_location->setText(originalIp + ", " + originalRegion);
-        ui->label_detected_location->setText(originalIp);
-        ui->label_detected_country->setText(originalCountry);
-        ui->label_detected_flag->setPixmap(QPixmap::fromImage(Flags::Instance().getFlag(originalCountry)));
-        setDetectedLocation();
 
 
         m_trayActionConnect->setEnabled(true);
@@ -998,19 +553,15 @@ void MainWindow::onVpnStateChanged(VPNClient::STATE state)
     if (state == VPNClient::CONNECTED) {
         durationTimer.start(1000);
         connectedDateTime = QDateTime::currentDateTime().toTime_t();
-        ui->stackedWidget_center->setCurrentWidget(ui->page_center_connected);
-        ui->label_status->setText(tr("Connected"));
+//        ui->stackedWidget_center->setCurrentWidget(ui->page_center_connected);
+//        ui->label_status->setText(tr("Connected"));
         ui->label_status_2->setText(tr("Connected"));
-        ui->pushButton_select_server->setEnabled(false);
-        ui->pushButton_cancelConnect->setEnabled(true);
-        ui->pushButton_disconnect->setEnabled(true);
+//        ui->pushButton_cancelConnect->setEnabled(true);
+//        ui->pushButton_disconnect->setEnabled(true);
 
-        Pinger::Instance().setPingCheckingEnabled(false);
-        //ui->stackedWidget_bottom->setCurrentWidget(ui->page_bottom_connected);
 
         setTrayIcon("active.png");
 
-        setDetectedLocation();
 
         m_trayActionConnect->setEnabled(true);
         m_trayActionConnect->setText(tr("Disconnect"));
@@ -1034,20 +585,15 @@ void MainWindow::onVpnStateChanged(VPNClient::STATE state)
 
     }
     if (state == VPNClient::VPNERROR) {      
-        ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
-        if (!ui->checkBox_autoServer->isChecked()) ui->pushButton_select_server->setEnabled(true);
-        Pinger::Instance().setPingCheckingEnabled(true);
+//        ui->stackedWidget_center->setCurrentWidget(ui->page_center_disconnected);
+//        if (!ui->checkBox_autoServer->isChecked()) ui->pushButton_select_server->setEnabled(true);
         //ui->stackedWidget_bottom->setCurrentWidget(ui->page_bottom_disconnected);
-        ui->label_status->setText(tr("VPN Error"));
+        //ui->label_status->setText(tr("VPN Error"));
         ui->label_status_2->setText(tr("VPN Error"));
 
         setTrayIcon("error.png");
 
         //ui->label_detected_location->setText(originalIp + ", " + originalRegion);
-        ui->label_detected_location->setText(originalIp);
-        ui->label_detected_country->setText(originalCountry);
-        ui->label_detected_flag->setPixmap(QPixmap::fromImage(Flags::Instance().getFlag(originalCountry)));
-        setDetectedLocation();
 
         m_trayActionConnect->setEnabled(true);
         m_trayActionConnect->setText(tr("Connect"));
@@ -1063,17 +609,17 @@ void MainWindow::onVpnStateChanged(VPNClient::STATE state)
     }
 
 
-    /// Display tray messages depends of server
-    if (currentServerId.isEmpty()) {
-        // if auto server
-        //if (state == VPNClient::CONNECTED) m_tray.showMessage("Obhod123", "VPN Connected");
-        //if (state == VPNClient::DISCONNECTED) m_tray.showMessage("Obhod123", "VPN Disconnected");
-    }
-    else {
-        //if (state == VPNClient::CONNECTED) m_tray.showMessage("Obhod123", "VPN Connected");
-        //if (state == VPNClient::DISCONNECTED) m_tray.showMessage("Obhod123", "VPN Disconnected");
-        //if (state == VPNClient::CONNECTING) m_tray.showMessage("Obhod123", "Connecting to VPN...");
-    }
+//    /// Display tray messages depends of server
+//    if (currentServerIp.isEmpty()) {
+//        // if auto server
+//        //if (state == VPNClient::CONNECTED) m_tray.showMessage("Obhod123", "VPN Connected");
+//        //if (state == VPNClient::DISCONNECTED) m_tray.showMessage("Obhod123", "VPN Disconnected");
+//    }
+//    else {
+//        //if (state == VPNClient::CONNECTED) m_tray.showMessage("Obhod123", "VPN Connected");
+//        //if (state == VPNClient::DISCONNECTED) m_tray.showMessage("Obhod123", "VPN Disconnected");
+//        //if (state == VPNClient::CONNECTING) m_tray.showMessage("Obhod123", "Connecting to VPN...");
+//    }
 
 }
 
@@ -1201,7 +747,6 @@ void MainWindow::setupTray()
         msgBox.setDefaultButton(QMessageBox::No);
         msgBox.raise();
         if (msgBox.exec() == QMessageBox::Yes) {
-            Pinger::Instance().stopServersPing();
             qApp->quit();
         }
 
@@ -1214,77 +759,6 @@ void MainWindow::setupTray()
     m_tray.show();
 }
 
-void MainWindow::setDetectedLocation()
-{
-    API_HTTP::Instance().requestDetectedLocation([&](QJsonObject location){
-
-        /// prev service
-        //        QString region = location.value("region").toString();
-        //        QString country = location.value("country").toString();
-        //        QString ip = location.value("ip").toString();
-
-        /// prev service
-        //        QString region = location.value("region").toString();
-        //        QString country = location.value("countryCode").toString();
-        //        QString ip = location.value("query").toString();
-
-        QString region = location.value("region").toString();
-        QString country = location.value("country_code").toString();
-        QString ip = location.value("ip").toString();
-
-        if (ip.isEmpty()) {
-            qDebug() << "MainWindow::setDetectedLocation ip.isEmpty";
-            detectedLocationTimer.start(5000);
-        }
-        else {
-            //ui->label_detected_location->setText(ip + ", " + region);
-            //ui->label_detected_country->setText(country);
-
-            ui->label_detected_location->setText(ip);
-            ui->label_detected_flag->setPixmap(QPixmap::fromImage(Flags::Instance().getFlag(country)));
-
-            detectedLocationTimer.stop();
-        }
-    });
-}
-
-void MainWindow::setSelectedLocation(const QString& serverId)
-{
-    bool autoServer = Settings::autoServer();
-    if (serverId.isEmpty()) {
-        ui->label_current_server->setText("Auto Selection");
-        //ui->label_current_flag->move(40, 318);
-        //ui->label_current_flag->resize(14,15);
-        ui->label_current_flag->setPixmap(QPixmap());
-    }
-    else {
-        const QJsonObject &server = API_HTTP::Instance().getServerById(serverId);
-        ui->label_current_server->setText(server.value("name").toString());
-       // ui->label_current_flag->resize(30,30);
-        //ui->label_current_flag->move(40, 305);
-        ui->label_current_flag->setPixmap(QPixmap::fromImage(Flags::Instance().getFlag(server.value("flag").toString())));
-    }
-
-    if (autoServer) {
-        //ui->pushButton_select_server->setStyleSheet("background-color: rgba(255, 255, 255, 0.7);");
-        ui->label_current_server->setEnabled(false);
-        ui->pushButton_select_server->setEnabled(false);
-    }
-    else {
-        //ui->pushButton_select_server->setStyleSheet("");
-        ui->label_current_server->setEnabled(true);
-        ui->pushButton_select_server->setEnabled(true);
-    }
-    ui->pushButton_select_server->style()->unpolish(ui->pushButton_select_server);
-    ui->pushButton_select_server->style()->polish(ui->pushButton_select_server);
-
-    if (!autoServer && serverId.isEmpty()) {
-        ui->label_current_server->setText("Click to select server");
-    }
-}
-
-
-
 void MainWindow::setupGraphicsEffects()
 {
     //  Main Window Shadow
@@ -1293,40 +767,6 @@ void MainWindow::setupGraphicsEffects()
     shadow->setColor(QColor(50,50,50));
     shadow->setDistance(0);
     ui->widget_main->setGraphicsEffect(shadow);
-}
-
-void MainWindow::setOriginalLocation()
-{
-    if (!originalCountry.isEmpty()) {
-        originalLocationTimer.stop();
-        return;
-    }
-
-    API_HTTP::Instance().requestDetectedLocation([&](QJsonObject location){
-
-        // prev
-        //        originalRegion = location.value("region").toString();
-        //        originalCountry = location.value("countryCode").toString();
-        //        originalIp = location.value("query").toString();
-
-        QString originalRegion = location.value("region").toString();
-        QString originalCountry = location.value("country_code").toString();
-        QString originalIp = location.value("ip").toString();
-
-        if (originalCountry.isEmpty()) {
-            originalLocationTimer.start(5000);
-        }
-        else {
-            //ui->label_detected_location->setText(originalIp + ", " + originalRegion);
-            ui->label_detected_location->setText(originalIp);
-            ui->label_detected_country->setText(originalCountry);
-            ui->label_detected_flag->setPixmap(QPixmap::fromImage(Flags::Instance().getFlag(originalCountry)));
-
-            //setDetectedLocation();
-            //trackStartUp();
-        }
-
-    });
 }
 
 void MainWindow::initBlockedSites()
@@ -1365,15 +805,6 @@ void MainWindow::onTrayActionConnect()
     } else if(m_trayActionConnect->text() == tr("Disconnect")) {
         onDisconnect();
     }
-}
-
-void MainWindow::on_checkBox_autoServer_clicked()
-{
-    Settings::setAutoServer(ui->checkBox_autoServer->isChecked());
-    ui->pushButton_select_server->setEnabled(!ui->checkBox_autoServer->isChecked());
-
-    if (ui->checkBox_autoServer->isChecked()) setSelectedLocation("");
-    else setSelectedLocation(Settings::currentServerId());
 }
 
 ///
@@ -1419,8 +850,8 @@ void MainWindow::onSpeedCounterRefresh()
     qint64 currentSendSpeed = m_sendSpeedPrev + currentInterval*(m_sendSpeedNext - m_sendSpeedPrev) / 1000.0;
     qint64 currentReceiveSpeed = m_receiveSpeedPrev + currentInterval*(m_receiveSpeedNext - m_receiveSpeedPrev) / 1000.0;
 
-    ui->label_speed_download->setText(QString("%1bps").arg(FormatDataNumber(currentReceiveSpeed * 8)));
-    ui->label_speed_upload->setText(QString("%1bps").arg(FormatDataNumber(currentSendSpeed * 8)));
+//    ui->label_speed_download->setText(QString("%1bps").arg(FormatDataNumber(currentReceiveSpeed * 8)));
+//    ui->label_speed_upload->setText(QString("%1bps").arg(FormatDataNumber(currentSendSpeed * 8)));
 
     ui->label_speed_download_2->setText(QString("%1bps").arg(FormatDataNumber(currentReceiveSpeed * 8)));
     ui->label_speed_upload_2->setText(QString("%1bps").arg(FormatDataNumber(currentSendSpeed * 8)));
@@ -1443,14 +874,6 @@ void MainWindow::setTrayIcon(const QString& iconName)
     m_tray.setIcon(QIcon(QPixmap(QString(resourcesPath).arg(useIconName)).scaled(128,128)));
 }
 
-
-
-
-void MainWindow::on_pushButton_forgot_password_back_clicked()
-{
-    ui->stackedWidget_main->slideInWidget(ui->page_login);
-}
-
 void MainWindow::on_pushButton_hide_clicked()
 {
     hideAnimated();
@@ -1459,42 +882,11 @@ void MainWindow::on_pushButton_hide_clicked()
 void MainWindow::on_pushButton_logout_clicked()
 {
     onDisconnect();
-    setupLoginPage();
 }
 
 void MainWindow::on_lineEdit_username_returnPressed()
 {
     on_pushButton_login_clicked();
-}
-
-void MainWindow::on_pushButton_cancel_2_clicked()
-{
-    ui->stackedWidget_main->slideInWidget(ui->page_login);
-}
-
-void MainWindow::on_pushButton_donate_clicked()
-{
-    ui->stackedWidget_main->slideInWidget(ui->page_donate);
-}
-
-void MainWindow::on_pushButton_back_from_donate_clicked()
-{
-    ui->stackedWidget_main->slideInWidget(ui->page_obhod);
-}
-
-void MainWindow::on_pushButton_back_from_pay_clicked()
-{
-    ui->stackedWidget_main->slideInWidget(ui->page_obhod);
-}
-
-void MainWindow::on_pushButton_pay_clicked()
-{
-    ui->stackedWidget_main->slideInWidget(ui->page_pay);
-}
-
-void MainWindow::on_pushButton_copy_btc_to_clipboard_clicked()
-{
-    qApp->clipboard()->setText(ui->label_btc_address->text());
 }
 
 void MainWindow::on_pushButton_blocked_list_clicked()
@@ -1505,59 +897,6 @@ void MainWindow::on_pushButton_blocked_list_clicked()
 void MainWindow::on_pushButton_back_from_sites_clicked()
 {
     ui->stackedWidget_main->slideInWidget(ui->page_obhod);
-}
-
-void MainWindow::on_pushButton_pay_go_clicked()
-{
-    QDesktopServices::openUrl(QUrl("https://obhod123.com/buy?source=app"));
-}
-
-void MainWindow::on_pushButton_pay_apply_new_clicked()
-{
-    ui->pushButton_pay_apply_new->setEnabled(false);
-
-    QString newUserId = ui->lineEdit_pay_license_key->text();
-    if (newUserId.isEmpty()) return;
-    QString oldUserId = Settings::userId();
-
-
-    // request auth from servers
-    API_HTTP::ActivationResult response = API_HTTP::Instance().activateNewLicense(newUserId, oldUserId);
-    qDebug() << "MainWindow::on_pushButton_pay_apply_new_clicked, new license key:" << newUserId
-             << "   Activation result:" << response;
-
-    if (response == API_HTTP::ACTIVATION_SUCCESS) {
-        ui->label_pay_newkey_error->setText(tr("License key successfully activated."));
-        Settings::setUserId(newUserId);
-        if (newUserId == "free") {
-            Settings::setLicenseValidDateTime(QDateTime::currentDateTimeUtc().addDays(7));
-        }
-        else {
-            Settings::setLicenseValidDateTime(QDateTime::fromSecsSinceEpoch(API_HTTP::Instance().authData().value("valid").toString().toLongLong()));
-        }
-
-        Settings::setLicenseMode(API_HTTP::Instance().authData().value("mode").toString());
-
-        displayLicenseInfo();
-        ui->lineEdit_pay_license_key->clear();
-
-        // connect only if obhod mode
-        if (Settings::appMode() == "obhod") onConnect();
-    }
-    else if (response == API_HTTP::ACTIVATION_KEY_NOT_FOUND) {
-        ui->label_pay_newkey_error->setText(tr("This license key is invalid.\n"
-                                               "Ask support to get a help."));
-    }
-    else if (response == API_HTTP::ACTIVATION_KEY_EXPIRED) {
-        ui->label_pay_newkey_error->setText(tr("This license key expired.\n"
-                                               "Ask support to get a help."));
-    }
-    else {
-        ui->label_pay_newkey_error->setText(tr("Server temporary unavailable.\n"
-                                               "Try to activate later."));
-    }
-
-    ui->pushButton_pay_apply_new->setEnabled(true);
 }
 
 void MainWindow::on_pushButton_sites_add_custom_clicked()
@@ -1634,21 +973,23 @@ void MainWindow::on_pushButton_sites_delete_custom_clicked()
     Router::Instance().flushDns();
 }
 
-void MainWindow::on_pushButton_pay_activate_free_clicked()
-{
-    ui->pushButton_pay_activate_free->setEnabled(false);
-    ui->lineEdit_pay_license_key->setText("free");
-    on_pushButton_pay_apply_new_clicked();
-    ui->pushButton_pay_activate_free->setEnabled(true);
-}
-
 void MainWindow::on_pushButton_back_from_after_update_clicked()
 {
     ui->stackedWidget_main->slideInWidget(ui->page_obhod);
 }
 
-void MainWindow::on_pushButton_obhod_logo_clicked()
+void MainWindow::on_pushButton_new_server_clicked()
 {
-    //ui->stackedWidget_main->slideInWidget(ui->page_after_update);
-}
+    ui->stackedWidget_main->slideInWidget(ui->page_new_server, SlidingStackedWidget::AUTOMATIC);
 
+    //    const char *hostname = "185.242.84.131";
+//    const char *command = "uptime";
+//    const char *username    = "root";
+//    const char *password    = "4B692iy3RFZu";
+//    //const char *password    = "aPgdo45dWUd4";
+
+//    std::vector<const char *> commands;
+//    commands.push_back(command);
+
+//    execCommand(hostname, commands, username, password);
+}

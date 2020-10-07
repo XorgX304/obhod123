@@ -98,20 +98,18 @@ ICON   = images/main.icns
 }
 
 SOURCES  += main.cpp\
+   backend/sshclient.cpp \
             ui/mainwindow.cpp \
             ui/customshadoweffect.cpp \
-    ui/serversmodel.cpp \
     ui/settingswindow.cpp \
     ui/flags.cpp \
     ui/Controls/SlidingStackedWidget.cpp \
     ui/Controls/serverstableview.cpp \
     publib/runguard.cpp \
     backend/api_http.cpp \
-    backend/pinger.cpp \
     backend/vpnclient.cpp \
     backend/obhod123.cpp \
     backend/vpnutils.cpp \
-    backend/updater.cpp \
     backend/router.cpp \
     backend/debug.cpp \
     backend/license.cpp \
@@ -119,19 +117,17 @@ SOURCES  += main.cpp\
     backend/networkcontroller_win.cpp
 
 HEADERS  += ui/mainwindow.h \
+   backend/sshclient.h \
             ui/customshadoweffect.h \
-    ui/serversmodel.h \
     ui/Controls/SlidingStackedWidget.h \
     ui/Controls/serverstableview.h \
     ui/flags.h \
     publib/runguard.h \
-    backend/pinger.h \
     backend/api_http.h \
     backend/vpnclient.h \
     backend/vpndefine.h \
     backend/obhod123.h \
     backend/vpnutils.h \
-    backend/updater.h \
     backend/router.h \
     backend/debug.h \
     backend/license.h \
@@ -143,3 +139,17 @@ FORMS    += ui/mainwindow.ui
 
 TRANSLATIONS = translations/obhod123.en.ts \
     translations/obhod123.ru.ts
+
+win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../../../3rd/libssh2/build/src/release/ -llibssh2
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../../../3rd/libssh2/build/src/debug/ -llibssh2
+
+INCLUDEPATH += $$PWD/../../../3rd/libssh2/include
+DEPENDPATH += $$PWD/../../../3rd/libssh2/include
+
+win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/../../../3rd/libssh2/build/src/release/liblibssh2.a
+else:win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/../../../3rd/libssh2/build/src/debug/liblibssh2.a
+else:win32:!win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/../../../3rd/libssh2/build/src/release/libssh2.lib
+else:win32:!win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/../../../3rd/libssh2/build/src/debug/libssh2.lib
+
+
+win32: LIBS += -L$$PWD/../../../../../../../OpenSSL-Win32/lib/ -llibcrypto

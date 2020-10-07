@@ -5,7 +5,6 @@
 
 #include "vpnutils.h"
 #include "obhod123.h"
-#include "pinger.h"
 #include "vpndefine.h"
 
 #ifdef Q_OS_WIN
@@ -259,54 +258,17 @@ bool Obhod123::onConnectAuto(const QJsonObject& connectionParams)
 
     qDebug().noquote() << "Obhod123::onConnectAuto ___START___";
 
-    QList<QJsonObject> servers;
-    QList<QJsonObject> serversWithPingLessThan200;
-    for (const QJsonValue &value : API_HTTP::Instance().getServersList()) {
-        const QJsonObject &server = value.toObject();
-        servers.append(server);
+    const QJsonObject &server = API_HTTP::Instance().getCurrentServer();
 
-        if (Pinger::Instance().getPing(server.value("id").toString()) < 200) {
-            serversWithPingLessThan200.append(server);
-        }
-    }
-    std::sort(servers.begin(), servers.end(), [&](QJsonObject serverLeft, QJsonObject serverRight){
-        return Pinger::Instance().getPing(serverLeft.value("id").toString()) < Pinger::Instance().getPing(serverRight.value("id").toString());
-    });
-
-    // add more servers if count < 5
-    if (servers.size() >= 5) {
-        if (serversWithPingLessThan200.size() < 5) {
-            for (int i = 0; i < 10 - serversWithPingLessThan200.size(); i++)
-                if (i < servers.size())
-                    serversWithPingLessThan200.append(servers.at(i));
-        }
-
-        servers = serversWithPingLessThan200;
-    }
-
-
-
-    // randomize
-    if (servers.size() > 1) {
-        for (int i = 0; i < 100; ++i) {
-            int index1 = qrand() % (servers.size() - 1);
-            int index2 = qrand() % (servers.size() - 1);
-            if (index1 == index2) continue;
-            qSwap(servers[index1], servers[index2]);
-        }
-    }
 
     disconnect(messagesConnection); // don't diplay messages when auto connect
 
     int count = 0;
     forever {
         autoConnectInProgress = true;
-        qDebug().noquote() << "Obhod123::onConnectAuto :::: loop start, count servers:" << servers.size();
+        qDebug().noquote() << "Obhod123::onConnectAuto :::: loop start";
         if (cancelAutoConnect) break;
-        if (servers.isEmpty()) {
-            qDebug().noquote() << "Obhod123::onConnectAuto :::: break on servers.isEmpty()";
-            break;
-        }
+
         if (m_vpnStatus == VPNStatusDisconnecting || m_vpnStatus == VPNStatusCanceling) {
             qDebug().noquote() << "Obhod123::onConnectAuto :::: break on  VPNStatusDisconnecting | VPNStatusCanceling";
             break;
@@ -319,9 +281,9 @@ bool Obhod123::onConnectAuto(const QJsonObject& connectionParams)
         count++;
 
         QJsonObject connParams = connectionParams;
-        connParams.insert("server", servers.first());
+        connParams.insert("server", server);
 
-        emit autoTryingServer(servers.first().value("id").toString(), count);
+        emit autoTryingServer(server.value("id").toString(), count);
 
         // test
         //        if (qrand() % 5 > 10) {
@@ -329,8 +291,6 @@ bool Obhod123::onConnectAuto(const QJsonObject& connectionParams)
         //            server.insert("ip", "google.com");
         //            connParams.insert("server", server);
         //        }
-
-        servers.removeFirst();
 
         qDebug().noquote() << "Trying to connect with params:" << connParams;
         bool ok = onConnect(connParams);

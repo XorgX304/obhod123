@@ -1,4 +1,4 @@
-﻿#ifndef SETTINGS_H
+#ifndef SETTINGS_H
 #define SETTINGS_H
 
 #include <QDateTime>
@@ -42,9 +42,10 @@ public:
     //////////////////////////////////////////////
 
     // currentServerId: last store server id
-    static QString currentServerId() { return q_settings().value("currentServerId").toString(); }
-    static bool hasCurrentServerId() { return q_settings().contains("currentServerId"); }
-    static void setCurrentServerId(const QString &currentServerId) { q_settings().setValue("currentServerId", currentServerId); }
+    //static QString currentServerIp() { return q_settings().value("currentServerIp").toString(); }
+    static QString currentServerIp() { return "54.38.141.191"; }
+    static bool hasCurrentServerIp() { return q_settings().contains("currentServerIp"); }
+    static void setCurrentServerIp(const QString &currentServerIp) { q_settings().setValue("currentServerIp", currentServerIp); }
 
     // autoServer - whether or not select server automatically during connect
     static bool autoServer() { return q_settings().value("autoServer").toBool(); }

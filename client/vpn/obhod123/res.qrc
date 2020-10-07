@@ -12,9 +12,6 @@
         <file>images/controls/check_on.png</file>
         <file>images/controls/radio_off.png</file>
         <file>images/controls/radio_on.png</file>
-        <file>fonts/OpenSans-Bold.ttf</file>
-        <file>fonts/OpenSans-Regular.ttf</file>
-        <file>fonts/OpenSans-Semibold.ttf</file>
         <file>images/connected_line.png</file>
         <file>images/download.png</file>
         <file>images/upload.png</file>
@@ -268,18 +265,27 @@
         <file>images/flags/ZM.png</file>
         <file>images/flags/ZW.png</file>
         <file>images/flags/UK.png</file>
-        <file>images/controls/checkbox_checked.png</file>
         <file>images/controls/checkbox_hover.png</file>
         <file>images/controls/checkbox_unchecked.png</file>
-        <file>fonts/Ancient-Medium.ttf</file>
         <file>images/tray/active.png</file>
         <file>images/tray/default.png</file>
         <file>images/tray/error.png</file>
-        <file>fonts/JMH Cthulhumbus.otf</file>
         <file>images/arrow_left.png</file>
-        <file>images/arrow_right.png</file>
-        <file>images/darknet.gif</file>
         <file>translations/obhod123.en.qm</file>
         <file>translations/obhod123.ru.qm</file>
+        <file>images/connect_button_connected.png</file>
+        <file>images/connect_button_disconnected.png</file>
+        <file>fonts/Lato-Black.ttf</file>
+        <file>fonts/Lato-BlackItalic.ttf</file>
+        <file>fonts/Lato-Bold.ttf</file>
+        <file>fonts/Lato-BoldItalic.ttf</file>
+        <file>fonts/Lato-Italic.ttf</file>
+        <file>fonts/Lato-Light.ttf</file>
+        <file>fonts/Lato-LightItalic.ttf</file>
+        <file>fonts/Lato-Regular.ttf</file>
+        <file>fonts/Lato-Thin.ttf</file>
+        <file>fonts/Lato-ThinItalic.ttf</file>
+        <file>images/Line.png</file>
+        <file>images/VPN123.png</file>
     </qresource>
 </RCC>

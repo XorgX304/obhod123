@@ -28,50 +28,19 @@ public:
     static API_HTTP& Instance();
     void resetNAM();
 
-    void setTrialUserId() { m_user_id = "free"; }
-
-    enum AuthResult { AUTH_SUCCESS, AUTH_TIMEOUT, AUTH_KEY_NOT_FOUND, AUTH_KEY_EXPIRED };
-    Q_ENUM(AuthResult)
-    AuthResult requestAuth(const QString& user_id);
-    AuthResult requestAuthWorker(const QString& user_id, const QString& serverIp);
-
-    enum ActivationResult { ACTIVATION_SUCCESS, ACTIVATION_TIMEOUT, ACTIVATION_KEY_NOT_FOUND, ACTIVATION_KEY_EXPIRED };
-    Q_ENUM(ActivationResult)
-    ActivationResult activateNewLicense(const QString& new_user_id, const QString& old_user_id);
-    ActivationResult activateNewLicenseWorker(const QString& new_user_id, const QString& old_user_id, const QString& serverIp);
-
-    bool requestServers(const QList<QPair<QString, double> > &serverIds);
-    bool requestServersWorker(const QString& serverIp);
-
     bool requestBlockedIpsWorker(const QString& serverIp);
     bool requestBlockedIps();
 
-
-    bool loadServersFromDisk();
-    bool loadServersFromDisk_text();
-    void saveServersToDisk();
-
-    QString serversListPath() { return qApp->applicationDirPath() + QDir::separator() + "servers.dat"; }
-
-    bool initServerListText(const QByteArray& textData);
-    bool initServerListRaw(const QByteArray& rawData);
-    bool initServerList(const QJsonObject& o);
-
-    void requestDetectedLocation(std::function<void(QJsonObject)> func, int timeout = 10000);
     bool getIgnoreSslErrors() const;
     void setIgnoreSslErrors(bool ignore);
 
     const QJsonObject authData() const;
     void clearAuthData();
-    const QJsonArray getServersInRegion(const QString& region) const;
-    const QJsonObject getServerById(const QString& id) const;
-    const QStringList getRegions() const;
 
     const QStringList getBlackIPs() const;
 
-    QString getUserId() const;
     bool getServersListDownloaded() const;
-    QJsonArray getServersList() const;
+    QJsonObject getCurrentServer() const;
 
     QNetworkConfigurationManager confManager;
 
@@ -106,10 +75,6 @@ private:
     QPointer<QNetworkAccessManager> manager;
 
     QJsonObject m_authData;
-    QString m_user_id;
-
-    QMap<QString, QJsonArray> regionsMap; // <region, list servers>
-    QMap<QString, QJsonObject> serversMap; // <server id, server data>
 
     bool isServerListDownloaded;
     bool ignoreSslErrors;

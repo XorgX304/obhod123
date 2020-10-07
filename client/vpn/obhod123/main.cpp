@@ -1,4 +1,4 @@
-﻿#include <QGuiApplication>
+#include <QGuiApplication>
 #include <QFontDatabase>
 #include <QCommandLineParser>
 #include <QMessageBox>
@@ -36,11 +36,17 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    QFontDatabase::addApplicationFont(QString(":/fonts/OpenSans-Regular.ttf"));
-    QFontDatabase::addApplicationFont(QString(":/fonts/OpenSans-Bold.ttf"));
-    QFontDatabase::addApplicationFont(QString(":/fonts/OpenSans-Semibold.ttf"));
-    QFontDatabase::addApplicationFont(QString(":/fonts/Ancient-Medium.ttf"));
-    QFontDatabase::addApplicationFont(QString(":/fonts/JMH Cthulhumbus.otf"));
+    QFontDatabase::addApplicationFont(":/fonts/Lato-Black.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-BlackItalic.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-Bold.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-BoldItalic.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-Italic.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-Light.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-LightItalic.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-Regular.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-Thin.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Lato-ThinItalic.ttf");
+
 
     {
         QTranslator *translator = new QTranslator;
@@ -56,8 +62,8 @@ int main(int argc, char *argv[])
     }
 
 
-    app.setOrganizationName("obhod123");
-    app.setOrganizationDomain("obhod123.com");
+    app.setOrganizationName("VPN123");
+    app.setOrganizationDomain("VPN123.ORG");
     app.setApplicationName(ApplicationName);
     app.setApplicationDisplayName(ApplicationName);
     app.setApplicationVersion("1.0.0.0");
@@ -65,7 +71,7 @@ int main(int argc, char *argv[])
     app.setQuitOnLastWindowClosed(false);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("WTF? What you are looking for?");
+    parser.setApplicationDescription("VPN123");
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -98,7 +104,7 @@ int main(int argc, char *argv[])
     MainWindow mainWindow(forceUseBrightIcons);
     mainWindow.show();
 
-    QFont f("Open Sans Regular", 10);
+    QFont f("Lato Regular", 10);
     f.setStyleStrategy(QFont::PreferAntialias);
     app.setFont(f);
 

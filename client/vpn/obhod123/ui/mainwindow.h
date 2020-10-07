@@ -13,11 +13,8 @@
 #include <QGraphicsBlurEffect>
 #include "customshadoweffect.h"
 
-#include "serversmodel.h"
 #include "../backend/obhod123.h"
-#include "../backend/updater.h"
 #include "../backend/license.h"
-#include "../backend/pinger.h"
 
 #include "../backend/networkcontroller_win.h"
 
@@ -52,13 +49,6 @@ public slots:
     void on_pushButton_login_clicked();
 
     void on_pushButton_cancel_clicked();
-    void on_pushButton_select_server_clicked();
-    void on_pushButton_servers_all_clicked();
-    void on_pushButton_servers_recommended_clicked();
-    void on_pushButton_servers_favorites_clicked();
-    void on_tableView_servers_clicked(const QModelIndex &index);
-
-    void onServerListChanged();
 
     void on_checkBox_lauchOnStartup_clicked();
 
@@ -70,12 +60,10 @@ public slots:
     void onVpnStateChanged(VPNClient::STATE state);
     void onVpnMessage(QString msg);
     void onTrayActionConnect(); // connect in context menu
-    void on_checkBox_autoServer_clicked();
     void onSpeedCounterRequest();
     void onSpeedCounterRefresh();
 
     void setupInitPage();
-    void setupLoginPage();
     void setupObhodPage();
 
     void mayBeAutoLogin();
@@ -85,32 +73,19 @@ public slots:
     void hideAnimated();
 
 private slots:
-
-    void on_pushButton_forgot_password_back_clicked();
-
-
     void on_pushButton_logout_clicked();
 
     void on_lineEdit_username_returnPressed();
 
-    void on_pushButton_cancel_2_clicked();
-    void on_pushButton_donate_clicked();
-    void on_pushButton_back_from_donate_clicked();
-    void on_pushButton_back_from_pay_clicked();
-    void on_pushButton_pay_clicked();
-    void on_pushButton_copy_btc_to_clipboard_clicked();
     void on_pushButton_blocked_list_clicked();
     void on_pushButton_back_from_sites_clicked();
-    void on_pushButton_pay_go_clicked();
-    void on_pushButton_pay_apply_new_clicked();
 
     void on_pushButton_sites_add_custom_clicked();
     void on_pushButton_sites_delete_custom_clicked();
 
-    void on_pushButton_pay_activate_free_clicked();
     void on_pushButton_back_from_after_update_clicked();
-    void on_pushButton_obhod_logo_clicked();
 
+    void on_pushButton_new_server_clicked();
 
 private:
     void onConnect();
@@ -127,31 +102,13 @@ private:
     void setTrayIcon(const QString& iconName);
     void onTrayActivated(QSystemTrayIcon::ActivationReason reason);
     void setupTray();
-    void setDetectedLocation();
-    void setSelectedLocation(const QString& serverId);
     void checkIfFirstRun();
-
-
-    void displayLicenseInfo();
-
-    void initTarifSettings();
-    void setOriginalLocation();
-    //void trackStartUp();
 
     Ui::MainWindow *ui;
 
     QPoint initialMovePoint;
     bool canMove = false;
 
-    ServerModel *serversModel;
-    FilterModel *filterModel;
-
-    QString originalRegion;
-    QString originalCountry;
-    QString originalIp;
-
-    QTimer detectedLocationTimer;
-    QTimer originalLocationTimer;
     QTimer durationTimer;
     QTimer speedCounterRequestTimer;
     QTimer speedCounterRefreshTimer;
@@ -183,12 +140,6 @@ private:
     // Settings
     void loadSetting();
     void setSettingsConnections();
-
-    QString generateAppId();
-
-
-    void activateLicenseRestrictions();
-    void deActivateLicenseRestrictions();
 
     QStringListModel *customSitesModel;
 };
