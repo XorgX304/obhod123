@@ -985,11 +985,15 @@ void MainWindow::on_pushButton_new_server_clicked()
     //    const char *hostname = "185.242.84.131";
 //    const char *command = "uptime";
 //    const char *username    = "root";
-//    const char *password    = "4B692iy3RFZu";
-//    //const char *password    = "aPgdo45dWUd4";
+//    const char *password    = "";
 
 //    std::vector<const char *> commands;
 //    commands.push_back(command);
 
 //    execCommand(hostname, commands, username, password);
+}
+
+void MainWindow::on_pushButton_settings_clicked()
+{
+    ui->stackedWidget_main->slideInWidget(ui->page_new_server, SlidingStackedWidget::AUTOMATIC);
 }

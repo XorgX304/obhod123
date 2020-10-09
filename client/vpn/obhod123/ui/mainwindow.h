@@ -87,6 +87,8 @@ private slots:
 
     void on_pushButton_new_server_clicked();
 
+    void on_pushButton_settings_clicked();
+
 private:
     void onConnect();
     void onDisconnect();
